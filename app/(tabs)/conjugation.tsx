@@ -44,6 +44,7 @@ import {
   setConjugationMode,
 } from "@/lib/progress-storage";
 import { answersMatch } from "@/lib/utils";
+import { translateConjugation, capitalizeFirst } from "@/lib/english-translation";
 import StreakBanner from "@/components/StreakBanner";
 
 const TENSE_ORDER: TenseId[] = [
@@ -496,123 +497,6 @@ export default function ConjugationScreen() {
     startSession(lastTenses, lastCount, lastFilters, mode);
   }, [lastTenses, lastCount, lastFilters, mode, startSession]);
 
-  const getEnglishPrompt = (pronoun: string, verb: typeof VERBS[0], tense: TenseId): string => {
-    // Split on "/" to get each possible meaning
-    const meanings = verb.english.split('/').map(m =>
-      m.trim()
-        .replace(/^to\s+/, '')           // strip leading "to "
-        .replace(/\s*\([^)]*\)/g, '')    // strip parenthetical notes like "(a fact)"
-        .trim()
-    ).filter(m => m.length > 0);
-
-    // For lui/lei with multiple meanings pick one randomly; otherwise always first
-    let baseVerb = meanings[0];
-    if ((pronoun === 'lui' || pronoun === 'lei') && meanings.length > 1) {
-      baseVerb = meanings[Math.floor(Math.random() * meanings.length)];
-    }
-
-    // Map Italian pronoun to English
-    const engPronounMap: Record<string, string> = {
-      'io': 'I', 'tu': 'you', 'lui': 'he', 'lei': 'she',
-      'noi': 'we', 'voi': 'you all', 'loro': 'they',
-    };
-    const engPronoun = engPronounMap[pronoun] || pronoun;
-    const is3rdSingular = engPronoun === 'he' || engPronoun === 'she';
-    const hasAux = is3rdSingular ? 'has' : 'have';
-
-    // Conjugate simple present: add -s/-es for he/she/it with special cases
-    const toPresent3rd = (v: string): string => {
-      if (v === 'be') return 'is';
-      if (v === 'have') return 'has';
-      if (v === 'have to') return 'has to';
-      if (v === 'be able to') return 'is able to';
-      if (v === 'can') return 'can';
-      if (v === 'must') return 'must';
-      if (v === 'do') return 'does';
-      if (v === 'go') return 'goes';
-      if (v === 'go out') return 'goes out';
-      if (v.endsWith('sh') || v.endsWith('ch') || v.endsWith('x') || v.endsWith('z') || v.endsWith('ss')) return v + 'es';
-      if (v.endsWith('y') && !/[aeiou]y$/.test(v)) return v.slice(0, -1) + 'ies';
-      return v + 's';
-    };
-
-    // Past participle for common verbs
-    const toPastParticiple = (v: string): string => {
-      const table: Record<string, string> = {
-        'be': 'been', 'have': 'had', 'go': 'gone', 'do': 'done',
-        'eat': 'eaten', 'drink': 'drunk', 'see': 'seen', 'take': 'taken',
-        'read': 'read', 'write': 'written', 'give': 'given', 'put': 'put',
-        'come': 'come', 'say': 'said', 'tell': 'told', 'know': 'known',
-        'feel': 'felt', 'hear': 'heard', 'find': 'found', 'sleep': 'slept',
-        'understand': 'understood', 'make': 'made', 'speak': 'spoken',
-        'look for': 'looked for', 'go out': 'gone out', 'have to': 'had to',
-        'be able to': 'been able to', 'want to': 'wanted to',
-        'stay': 'stayed', 'arrive': 'arrived', 'want': 'wanted',
-        'look': 'looked', 'get up': 'gotten up', 'wake up': 'woken up',
-        'fall asleep': 'fallen asleep', 'get dressed': 'gotten dressed',
-        'sit down': 'sat down', 'wash': 'washed', 'call': 'called',
-        'walk': 'walked', 'run': 'run', 'buy': 'bought', 'pay': 'paid',
-        'bring': 'brought', 'think': 'thought', 'become': 'become',
-        'close': 'closed', 'open': 'opened', 'return': 'returned',
-        'leave': 'left', 'wait': 'waited', 'need': 'needed',
-        'cost': 'cost', 'lose': 'lost', 'win': 'won', 'live': 'lived',
-        'work': 'worked', 'play': 'played', 'use': 'used', 'start': 'started',
-      };
-      if (table[v]) return table[v];
-      if (v.endsWith('e')) return v + 'd';
-      if (v.endsWith('y') && !/[aeiou]y$/.test(v)) return v.slice(0, -1) + 'ied';
-      return v + 'ed';
-    };
-
-    // Full "to be" conjugation table for every tense
-    if (baseVerb === 'be' || verb.infinitive === 'essere') {
-      const beTenses: Record<TenseId, Record<string, string>> = {
-        presente: { 'I': 'am', 'you': 'are', 'he': 'is', 'she': 'is', 'we': 'are', 'you all': 'are', 'they': 'are' },
-        passato_prossimo: { 'I': 'have been', 'you': 'have been', 'he': 'has been', 'she': 'has been', 'we': 'have been', 'you all': 'have been', 'they': 'have been' },
-        imperfetto: { 'I': 'was', 'you': 'were', 'he': 'was', 'she': 'was', 'we': 'were', 'you all': 'were', 'they': 'were' },
-        futuro_semplice: { 'I': 'will be', 'you': 'will be', 'he': 'will be', 'she': 'will be', 'we': 'will be', 'you all': 'will be', 'they': 'will be' },
-        condizionale_presente: { 'I': 'would be', 'you': 'would be', 'he': 'would be', 'she': 'would be', 'we': 'would be', 'you all': 'would be', 'they': 'would be' },
-        congiuntivo_presente: { 'I': 'am', 'you': 'are', 'he': 'is', 'she': 'is', 'we': 'are', 'you all': 'are', 'they': 'are' },
-        imperativo: { 'I': '-', 'you': 'be!', 'he': 'be!', 'she': 'be!', 'we': "let's be!", 'you all': 'be!', 'they': 'be!' },
-      };
-      const form = beTenses[tense]?.[engPronoun];
-      if (form) return form === '-' ? '-' : `${engPronoun} ${form}`;
-    }
-
-    // Build the verb phrase based on tense
-    let verbPhrase: string;
-    switch (tense) {
-      case 'presente':
-        verbPhrase = is3rdSingular ? toPresent3rd(baseVerb) : baseVerb;
-        return `${engPronoun} ${verbPhrase}`;
-
-      case 'passato_prossimo':
-        verbPhrase = `${hasAux} ${toPastParticiple(baseVerb)}`;
-        return `${engPronoun} ${verbPhrase}`;
-
-      case 'imperfetto':
-        return `${engPronoun} used to ${baseVerb}`;
-
-      case 'futuro_semplice':
-        return `${engPronoun} will ${baseVerb}`;
-
-      case 'condizionale_presente':
-        return `${engPronoun} would ${baseVerb}`;
-
-      case 'congiuntivo_presente':
-        verbPhrase = is3rdSingular ? toPresent3rd(baseVerb) : baseVerb;
-        return `${engPronoun} ${verbPhrase}`;
-
-      case 'imperativo':
-        if (engPronoun === 'I') return '-';
-        if (engPronoun === 'we') return `let's ${baseVerb}!`;
-        return `${baseVerb}!`;
-
-      default:
-        return `${engPronoun} ${baseVerb}`;
-    }
-  };
-
   const currentQ = queue[queueIdx];
   const isAnswered = state !== 'idle';
   const isLastQuestion = queueIdx === queue.length - 1;
@@ -696,6 +580,7 @@ export default function ConjugationScreen() {
   if (phase === 'results') return <ResultsScreen score={sessionScore} total={queue.length} onRetry={retrySession} onNewSetup={() => setPhase('setup')} />;
   if (!currentQ) return null;
 
+  const translation = translateConjugation(currentQ.verb, currentQ.tense, currentQ.pronoun);
   const progressPct = queue.length > 0 ? (queueIdx / queue.length) * 100 : 0;
 
   return (
@@ -758,7 +643,7 @@ export default function ConjugationScreen() {
           ) : (
             <>
               <Text style={[styles.verbEnglish, { color: theme.textSecondary }]}>Conjugate for:</Text>
-              <Text style={[styles.verbItalian, { color: theme.text }]}>{getEnglishPrompt(currentQ.pronoun, currentQ.verb)}</Text>
+              <Text style={[styles.verbItalian, { color: theme.text }]}>{translateConjugation(currentQ.verb, currentQ.tense, currentQ.pronoun)}</Text>
               <View style={styles.promptRow}>
                 <Text style={[styles.blankLine, { color: theme.border }]}>_______________</Text>
               </View>
@@ -790,14 +675,18 @@ export default function ConjugationScreen() {
         {state === 'correct' && (
           <View style={[styles.feedbackBox, { backgroundColor: Colors.palette.successLight }]}>
             <Ionicons name="checkmark-circle" size={20} color={Colors.palette.success} />
-            <Text style={[styles.feedbackText, { color: Colors.palette.success }]}>Perfetto! "{currentQ.answer}"</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.feedbackText, styles.feedbackStacked, { color: Colors.palette.success }]}>Perfetto! {capitalizeFirst(currentQ.answer)}</Text>
+              <Text style={[styles.feedbackTranslation, { color: Colors.palette.success }]}>"{translation}"</Text>
+            </View>
           </View>
         )}
         {state === 'wrong' && (
           <View style={[styles.feedbackBox, { backgroundColor: Colors.palette.errorLight }]}>
             <Ionicons name="close-circle" size={20} color={Colors.palette.error} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.feedbackText, { color: Colors.palette.error }]}>Answer: "{currentQ.answer}"</Text>
+              <Text style={[styles.feedbackText, styles.feedbackStacked, { color: Colors.palette.error }]}>Answer: {capitalizeFirst(currentQ.answer)}</Text>
+              <Text style={[styles.feedbackTranslation, { color: Colors.palette.error }]}>"{translation}"</Text>
               <Text style={[styles.feedbackSub, { color: Colors.palette.error }]}>You wrote: "{input}"</Text>
             </View>
           </View>
@@ -805,7 +694,10 @@ export default function ConjugationScreen() {
         {state === 'revealed' && (
           <View style={[styles.feedbackBox, { backgroundColor: Colors.palette.gold + "22" }]}>
             <Ionicons name="eye-outline" size={20} color={Colors.palette.gold} />
-            <Text style={[styles.feedbackText, { color: Colors.palette.gold }]}>Answer: "{currentQ.answer}"</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.feedbackText, styles.feedbackStacked, { color: Colors.palette.gold }]}>Answer: {capitalizeFirst(currentQ.answer)}</Text>
+              <Text style={[styles.feedbackTranslation, { color: Colors.palette.gold }]}>"{translation}"</Text>
+            </View>
           </View>
         )}
 
@@ -908,6 +800,8 @@ const styles = StyleSheet.create({
   input: { height: 54, borderRadius: 14, paddingHorizontal: 18, fontSize: 18, fontFamily: "Inter_500Medium", borderWidth: 2 },
   feedbackBox: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12 },
   feedbackText: { fontSize: 15, fontFamily: "Inter_600SemiBold", flex: 1 },
+  feedbackStacked: { flex: 0 },
+  feedbackTranslation: { fontSize: 14, fontFamily: "Inter_500Medium", marginTop: 2 },
   feedbackSub: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2, opacity: 0.8 },
   btnRow: { flexDirection: "row", gap: 10 },
   revealBtn: { width: 54, height: 54, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1 },

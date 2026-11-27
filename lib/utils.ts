@@ -12,6 +12,14 @@ export function answersMatch(userInput: string, correctAnswer: string): boolean 
   const normUser = normalizeAnswer(userInput);
   const normCorrect = normalizeAnswer(correctAnswer);
   if (normUser === normCorrect) return true;
+  // Gender endings: "sono andato/a" means "sono andato" or "sono andata",
+  // and "siamo andati/e" means "siamo andati" or "siamo andate".
+  const gender = normCorrect.match(/^(.+)([oi])\/([ae])$/);
+  if (gender) {
+    const [, stem, first, second] = gender;
+    return normUser === stem + first || normUser === stem + second;
+  }
+
   const alternatives = correctAnswer.split('/').map(a => normalizeAnswer(a.trim()));
   return alternatives.some(a => normUser === a);
 }
